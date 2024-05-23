@@ -1,0 +1,151 @@
+---
+title: "R Consortium"
+author: "Stephen Uong & Christina Mehranbod"
+date: "2024-05-22"
+output: html_document
+---
+
+##Package Installation
+
+First, let's install all necessary packages for this exercise
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+install.packages("tidycensus")
+install.packages("tidyverse")
+
+```
+
+## Census API Key
+
+First, you must sign up to get a Census API key: https://api.census.gov/data/key_signup.html
+
+```{r census_api}
+
+library(tidycensus)
+
+census_api_key("INSERT API KEY", install = TRUE)
+
+#this is christina's but delete later
+
+census_api_key("0d1515194f46f009f34f94afcbf045315abdbfbd", install = TRUE)
+
+
+```
+
+## Explore Census Variables
+
+You can get a list of variables using tidycensus. 
+
+You can get a list of variables from the Dicennial Census or the American Community Survey. Since we are interested in the year 2021, let's use the American Community Survey. We will choose the 5-year ACS estimates because they tend to be more stable than 1 year estimates. 
+
+```{r variables, echo=FALSE}
+
+variables_2021 <- load_variables(2021, "acs5", cache = TRUE)
+
+View(variables_2021)
+
+library(knitr)
+
+
+```
+
+
+#Using get_acs()
+To download ACS data, we need three pieces of information. 
+
+First, what do we want our geography to be? What's our unit of analysis? 
+For this we have decided to use the Census tracts of New York State. See a full list of available geographies here: https://walker-data.com/tidycensus/articles/basic-usage.html#geography-in-tidycensus
+
+Second, what variables do we want? We can pull those directly in using the same command line. We can even give it our own titles. 
+
+Third, what year of data do we want? There's room for that too! 
+
+```{r acs, echo=FALSE}
+
+#what variables on the census tract level? 
+library(tidyverse)
+variables_tract <- variables_2021 %>%
+  filter(geography=="tract")
+
+#let's use median income in the past 12 months B07011_001 and educational attainment (B16010_001, B16010_002, B16010_015, B16010_028, B16010_041)
+
+#@STEVO: FOR THE LEVEL OF CENSUS TRACT, YOU NEED TO PUT A STATE - SHOULD WE JUST PICK NY FOR THIS EXAMPLE?
+acs_data <- get_acs(geography = "tract",
+                    variables = c(hhincome = "B07011_001",
+                                  total_education = "B16010_001", 
+                                  education_lessthanhs= "B16010_002", 
+                                  education_hs = "B16010_015", 
+                                  education_somecollege = "B16010_028", 
+                                  education_bachelors = "B16010_041"),
+                    state="NY",
+                    year=2021,
+                    output = "wide")
+
+#this command brings in the data as a dataframe, which means there is no geometry attached
+class(acs_data)
+
+#Explore data
+
+#put histograms here or something like that
+
+#to also bring in geometries, modify the command to bring in geometries
+acs_data_geo <- get_acs(geography = "tract",
+                    variables = c(hhincome = "B07011_001",
+                                  total_education = "B16010_001", 
+                                  education_lessthanhs= "B16010_002", 
+                                  education_hs = "B16010_015", 
+                                  education_somecollege = "B16010_028", 
+                                  education_bachelors = "B16010_041"),
+                    state="NY",
+                    year=2021,
+                    output = "wide", 
+                    geometry=TRUE)
+
+#using base R to plot
+
+plot(acs_data_geo)
+
+#this isn't the best way to plot but just to show that we have a map!
+
+
+```
+
+##Historical Data Import
+
+IPUMS (put what is stands for) is a data source for... 
+
+```{r ipums, echo=TRUE}
+
+
+
+```
+
+
+##PLACES Import
+```{r places, echo=TRUE}
+
+
+
+```
+
+##Beautiful Maps Using ggplot()
+
+```{r mapping, echo=FALSE}
+
+variables_2021 <- load_variables(2021, "acs5", cache = TRUE)
+
+View(variables_2021)
+
+library(knitr)
+
+
+```
+
+##Customizing Maps: Labels, Arrows, Colors and More!
+
+```{r mapping_custom, echo=FALSE}
+
+
+
+```

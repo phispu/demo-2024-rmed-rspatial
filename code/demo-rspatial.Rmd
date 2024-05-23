@@ -1,0 +1,192 @@
+---
+title: 'An Introduction to Tidy R Spatial Packages: Incorporating Historic Sociodemographic
+  Data from the US Census and Visualizing Geographic Distributions'
+author: "Stephen Uong & Christina Mehranbod"
+date: "2024-06-12"
+output: html_document
+---
+
+
+# A. Load Packages
+
+First, you must sign up to get a Census API key: https://api.census.gov/data/key_signup.html
+```{r packages}
+library(sf)
+library(tidyverse)
+library(tidycensus)
+library(ipums)
+
+# census_api_key("INSERT API KEY", install = TRUE)
+#this is christina's but delete later
+census_api_key("0d1515194f46f009f34f94afcbf045315abdbfbd", install = TRUE)
+```
+
+# B. Import Data
+## Recent Census data
+You can get a list of variables using tidycensus. 
+
+You can get a list of variables from the Dicennial Census or the American Community Survey. Since we are interested in the year 2021, let's use the American Community Survey. We will choose the 5-year ACS estimates because they tend to be more stable than 1 year estimates. 
+### Explore data
+```{r census_explore}
+variables_2021 <- load_variables(2021, "acs5", cache = TRUE)
+
+View(variables_2021)
+
+# library(knitr)
+```
+
+
+### Import using get_acs()
+To download ACS data, we need three pieces of information. 
+
+- First, what do we want our geography to be? What's our unit of analysis? 
+For this we have decided to use the Census tracts of New York State. See a full list of available geographies here: https://walker-data.com/tidycensus/articles/basic-usage.html#geography-in-tidycensus
+
+- Second, what variables do we want? We can pull those directly in using the same command line. We can even give it our own titles. 
+
+- Third, what year of data do we want? There's room for that too! 
+
+
+```{r census}
+#what variables on the census tract level? 
+library(tidyverse)
+variables_tract <- variables_2021 %>%
+  filter(geography=="tract")
+
+#let's use median income in the past 12 months B07011_001 and educational attainment (B16010_001, B16010_002, B16010_015, B16010_028, B16010_041)
+
+#@STEVO: FOR THE LEVEL OF CENSUS TRACT, YOU NEED TO PUT A STATE - SHOULD WE JUST PICK NY FOR THIS EXAMPLE?
+acs_data <- get_acs(geography = "tract",
+                    variables = c(hhincome = "B07011_001",
+                                  total_education = "B16010_001", 
+                                  education_lessthanhs= "B16010_002", 
+                                  education_hs = "B16010_015", 
+                                  education_somecollege = "B16010_028", 
+                                  education_bachelors = "B16010_041"),
+                    state="NY",
+                    year=2021,
+                    output = "wide")
+
+#this command brings in the data as a dataframe, which means there is no geometry attached
+class(acs_data)
+
+#Explore data
+
+#put histograms here or something like that
+
+#to also bring in geometries, modify the command to bring in geometries
+acs_data_geo <- get_acs(
+  geography = "tract",
+  variables = c(hhincome = "B07011_001",
+                total_education = "B16010_001", 
+                education_lessthanhs= "B16010_002", 
+                education_hs = "B16010_015", 
+                education_somecollege = "B16010_028", 
+                education_bachelors = "B16010_041"),
+  state = "NY",
+  year = 2021,
+  output = "wide", 
+  geometry = TRUE)
+
+#using base R to plot
+
+plot(acs_data_geo)
+
+#this isn't the best way to plot but just to show that we have a map!
+```
+
+
+
+## Historical Census data
+IPUMS (put what is stands for) is a data source for... 
+```{r}
+
+```
+
+
+## CDC PLACES Data (health outcomes)
+
+The [PLACES data](https://www.cdc.gov/places/index.html) was prepared by the Centers for Disease Control and Prevention (CDC), Robert Wood Johnson Foundation, and the CDC Foundation.
+
+```{r places}
+places_prelim <- sf::st_read('data/places2023/places2023.shp') # For some reason it's just a few states- need to double check this
+library(readr)
+places_prelim_df <- readr::read_csv('data/places2023.csv')
+```
+
+# C. Clean Data
+## Census
+```{r}
+
+```
+
+## PLACES
+```{r}
+places_prelim_df %>% head() %>% View()
+
+places_cvd <- places_prelim_df %>% 
+  dplyr::filter(MeasureId == 'CHD' & StateAbbr == 'NY') %>% # measureid
+  dplyr::transmute(GEOID = LocationName,
+                   state = StateAbbr, # stateabbr
+                   chd_prev = Data_Value) # data_value
+```
+
+## Merge Data
+```{r}
+merged <- acs_data_geo %>% 
+  dplyr::left_join(places_cvd, by = 'GEOID')
+```
+
+
+# D. Exploratory Data Analysis
+```{r}
+library(tidyverse)
+merged_long_noinc <- merged %>% 
+  tidyr::pivot_longer(cols = -c(GEOID, NAME, state, geometry, hhincomeE, hhincomeM),
+                      names_to = 'variable_name',
+                      values_to = 'value') 
+merged_long_noinc %>% 
+  ggplot(aes(y = value, x = 1)) + 
+  geom_violin() +
+  geom_boxplot(width = 0.2) +
+  facet_grid(. ~ variable_name)
+```
+
+
+# E. Mapping
+
+## E. Customizing Maps: Labels, Arrows, Colors and More!
+
+```{r mapping_custom}
+merged %>% names()
+merged_long <- merged %>% 
+  tidyr::pivot_longer(cols = -c(GEOID, NAME, state, geometry),
+                      names_to = 'variable_name',
+                      values_to = 'value') 
+
+
+# boundaries only
+merged %>% 
+  ggplot() +
+  geom_sf()
+
+# add in one variable
+merged %>% 
+  ggplot() +
+  geom_sf(aes(fill = total_educationE))
+
+# add in north arrow and scalebar
+library(ggspatial)
+merged %>% 
+  ggplot() +
+  geom_sf(aes(fill = total_educationE)) +
+  ggspatial::annotation_north_arrow() +
+  ggspatial::annotation_scale()
+
+# add in all variables
+merged_long %>% 
+  ggplot() +
+  geom_sf(aes(fill = value)) +
+  facet_wrap(vars(variable_name), ncol = 3)
+
+```
