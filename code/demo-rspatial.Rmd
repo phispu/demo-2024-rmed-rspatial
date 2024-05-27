@@ -23,8 +23,7 @@ census_api_key("0d1515194f46f009f34f94afcbf045315abdbfbd", install = TRUE)
 ```
 
 # B. Import Data
-
-### Recent Census data
+## Recent Census data
 You can get a list of variables using tidycensus. 
 
 You can get a list of variables from the Dicennial Census or the American Community Survey. Since we are interested in the year 2021, let's use the American Community Survey. We will choose the 5-year ACS estimates because they tend to be more stable than 1 year estimates. 
@@ -39,7 +38,6 @@ View(variables_2021)
 
 
 ### Import using get_acs(): A snapshot of 2021
-
 To download ACS data, we need three pieces of information. 
 
 - First, what do we want our geography to be? What's our unit of analysis? 
@@ -60,7 +58,7 @@ variables_tract <- variables_2021 %>%
 #let's use median income in the past 12 months B07011_001 and educational attainment (B16010_001, B16010_002, B16010_015, B16010_028, B16010_041)
 
 acs_data <- get_acs(geography = "tract",
-                    variables = c(hhincome = "B19013_001",
+                    variables = c(hhincome = "B07011_001",
                                   total_education = "B16010_001", 
                                   education_lessthanhs= "B16010_002", 
                                   education_hs = "B16010_015", 
@@ -78,7 +76,6 @@ acs_data <- acs_data %>%
     perc_somecollege = (education_somecollegeE / total_educationE),
     perc_bachelors = (education_bachelorsE / total_educationE)
   )
-
 
 #this command brings in the data as a dataframe, which means there is no geometry attached
 class(acs_data)
@@ -103,7 +100,6 @@ boxplot <- ggplot(acs_data, aes(y = perc_lessthanhs)) +
   labs(title = "Boxplot of Population with Less Than High School Education",
        y = "Percentage")
 
-boxplot
 
 #Bar plots for percentages
 
@@ -127,7 +123,6 @@ barplot <- ggplot(education_data, aes(x = education_level, y = proportion, fill 
        y = "Proportion") +
   theme(legend.position = "none")
 
-barplot
 
 #to also bring in geometries, modify the command to bring in geometries
 acs_data_geo <- get_acs(

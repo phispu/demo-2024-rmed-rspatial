@@ -18,7 +18,6 @@ install.packages("tidyverse")
 #christina added this 
 #added again
 
-#HI STEVO ITS CHRISTINA 
 
 ```
 
