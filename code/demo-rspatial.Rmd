@@ -37,7 +37,7 @@ View(variables_2021)
 ```
 
 
-### Import using get_acs()
+### Import using get_acs(): A snapshot of 2021
 To download ACS data, we need three pieces of information. 
 
 - First, what do we want our geography to be? What's our unit of analysis? 
@@ -49,7 +49,6 @@ For this we have decided to use the Census tracts of New York State. See a full 
 
 
 ```{r census}
-#to do: create percentages for vars
 
 #what variables on the census tract level? 
 library(tidyverse)
@@ -58,7 +57,6 @@ variables_tract <- variables_2021 %>%
 
 #let's use median income in the past 12 months B07011_001 and educational attainment (B16010_001, B16010_002, B16010_015, B16010_028, B16010_041)
 
-#@STEVO: FOR THE LEVEL OF CENSUS TRACT, YOU NEED TO PUT A STATE - SHOULD WE JUST PICK NY FOR THIS EXAMPLE?
 acs_data <- get_acs(geography = "tract",
                     variables = c(hhincome = "B07011_001",
                                   total_education = "B16010_001", 
@@ -70,17 +68,66 @@ acs_data <- get_acs(geography = "tract",
                     year=2021,
                     output = "wide")
 
+# Convert educational attainment counts to percentages
+acs_data <- acs_data %>%
+  mutate(
+    perc_lessthanhs = (education_lessthanhsE / total_educationE),
+    perc_hs = (education_hsE / total_educationE),
+    perc_somecollege = (education_somecollegeE / total_educationE),
+    perc_bachelors = (education_bachelorsE / total_educationE)
+  )
+
 #this command brings in the data as a dataframe, which means there is no geometry attached
 class(acs_data)
 
 #Explore data
+summary(acs_data[, c("perc_lessthanhs", "perc_hs", "perc_somecollege", "perc_bachelors")])
 
-#put histograms here or something like that
+#Histogram for distribution of pooulation with less than high school education across census tracts
+histogram <- ggplot(acs_data, aes(x = perc_lessthanhs)) +
+  geom_histogram(binwidth = 0.03, fill = "lightblue", color = "black", alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Distribution of Population with Less Than High School Education",
+       x = "Percentage",
+       y = "Frequency")
+
+histogram
+
+# Boxplot for percentage of population with a  high school degree across census tracts
+boxplot <- ggplot(acs_data, aes(y = perc_lessthanhs)) +
+  geom_boxplot(fill = "blue", color = "black", alpha = 0.5) +
+  theme_minimal() +
+  labs(title = "Boxplot of Population with Less Than High School Education",
+       y = "Percentage")
+
+
+#Bar plots for percentages
+
+# Reshape the data for easier plotting
+# Reshape the data for easier plotting
+education_data <- acs_data %>%
+  select(GEOID, perc_lessthanhs, perc_hs, perc_somecollege, perc_bachelors) %>%
+  pivot_longer(cols = starts_with("perc_"), names_to = "education_level", values_to = "proportion")
+
+print(head(education_data))
+summary(education_data$proportion)
+
+
+# Bar plot for educational attainment percentages
+#HELP: WHY ARE MY PROPORTION VALUES SO WEIRD
+barplot <- ggplot(education_data, aes(x = education_level, y = proportion, fill = education_level)) +
+  geom_col(color = "black", alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Educational Attainment Proportions",
+       x = "Education Level",
+       y = "Proportion") +
+  theme(legend.position = "none")
+
 
 #to also bring in geometries, modify the command to bring in geometries
 acs_data_geo <- get_acs(
   geography = "tract",
-  variables = c(hhincome = "B07011_001",
+  variables = c(hhincome = "B19013_001",
                 total_education = "B16010_001", 
                 education_lessthanhs= "B16010_002", 
                 education_hs = "B16010_015", 
@@ -93,19 +140,80 @@ acs_data_geo <- get_acs(
 
 #using base R to plot
 
-plot(acs_data_geo)
+#Plot median household income
 
-#this isn't the best way to plot but just to show that we have a map!
+#first NY state
+plot(st_geometry(acs_data_geo), col = NA, border = 'grey')
+
+#then median household income
+plot(acs_data_geo['hhincomeE'], add = TRUE, main = "Median Household Income by Census Tract in NY (2021)",
+     col = hcl.colors(5, rev = TRUE))
+
+#FIX THESE LABELS AND LEGEND - base R sucks but it's something
+# Add a legend
+legend("bottomleft", legend = levels(cut(acs_data_geo$hhincomeE, breaks = 5)), title = "Income", cex = 0.8)
+
+#this isn't the best way to plot (we'll show better ways) but just to show that we have a map!
 ```
 
+## Range of Data: Median Household Income from 2009 to 2021
 
+```{r range}
 
-## Historical Census data
-IPUMS (put what is stands for) is a data source for... 
-```{r}
+# Define the years of interest
+years <- 2009:2021 
+
+#define the variables from above
+
+variables <- c(hhincome = "B19013_001")
+
+#download data for multiple years
+
+# Function to download ACS data for a given year
+get_acs_data <- function(year) {
+  get_acs(
+    geography = "tract",
+    variables = variables,
+    state = "NY",
+    year = year,
+    output = "wide",
+    geometry = TRUE
+  ) %>%
+    mutate(year = year)  # Add a column for the year
+}
+
+# Download data for all years and combine into one data frame
+acs_data_list <- lapply(years, get_acs_data)
+acs_data_all_years <- bind_rows(acs_data_list)
+
+View(acs_data_all_years)
+
+# Check the structure of the combined data
+str(acs_data_all_years)
+
+#plotting median household income over the years
+
+#there are XX (INSERT NUMBER) census tracts so let's aggregate and plot averages
+
+average_income <- acs_data_all_years %>%
+  group_by(year) %>%
+  summarise(avg_hhincome=mean(hhincomeE, na.rm=TRUE))
+
+income_overtime <- ggplot(average_income, aes(x=year, y=avg_hhincome))+
+  geom_line(color="blue") +
+  geom_point(color="blue")+
+  theme_minimal()+
+  labs(title="Average Median Household Income Over Time in NY (2009-2021)", 
+       x="Year", 
+       y= "Average Median Household Income")
+
+income_overtime
+
 
 ```
 
+You can also map these! But we'll do this later. 
+ 
 
 ## CDC PLACES Data (health outcomes)
 
