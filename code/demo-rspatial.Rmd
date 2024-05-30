@@ -1,0 +1,500 @@
+---
+title: 'An Introduction to Tidy R Spatial Packages: Incorporating Historic Sociodemographic
+  Data from the US Census and Visualizing Geographic Distributions'
+author: "Stephen Uong & Christina Mehranbod"
+date: "2024-06-12"
+output: html_document
+---
+
+
+# A. Load Packages
+
+First, we will load packages that we need for this tutorial. In order to use the tidycensus package, you will need to sign up for a Census API key: https://api.census.gov/data/key_signup.html
+```{r packages}
+library(tidyverse)
+library(readr)
+library(sf)
+library(tidycensus)
+library(ggspatial) # north arrow and scale bar
+library(patchwork) # combine multiple maps
+# library(ipumsr)
+
+
+# census_api_key("INSERT API KEY", install = TRUE)
+#this is christina's but delete later
+census_api_key("0d1515194f46f009f34f94afcbf045315abdbfbd", install = TRUE)
+
+```
+
+# B. Primer to Tutorial Syntax
+
+When referring to a new function for the first time, we will use the double colon operator (`::`) to specify the source package of the function. For example, `dplyr::filter()` refers to the `filter()` function from the dplyr package, which is used to subset rows in a data frame that meets certain conditions (i.e., where Species is setosa).
+```{r}
+data(iris) # This loads the iris dataset
+
+dplyr::filter(iris, Species == 'setosa')
+```
+
+In this tutorial, we will use [pipes](https://r4ds.had.co.nz/pipes.html) (`%>%`) from the magrittr package in order to clearly express sequences of steps. Piping allows us to read the code from top --> bottom rather than inside --> out.
+```{r}
+# Without pipes
+head(dplyr::select(dplyr::filter(iris, Species == 'setosa'), Sepal.Length, Sepal.Width))
+
+# With pipes
+iris %>% 
+  dplyr::filter(Species == 'setosa') %>% 
+  dplyr::select(Sepal.Length, Sepal.Width) %>% 
+  head()
+```
+
+
+
+
+
+# C. Importing Data
+## C.1. Recent Census data
+
+### C.1.1. Explore Available Data
+You can get a list of variable names and descriptions from the U.S. Census using the `load_variables()` function from the tidycensus package. Since we are interested in the year 2021, let's use the American Community Survey (vs. the Decennial Census data). We will use the 5-year ACS estimates because they tend to be more stable than 1-year estimates and filter to variables that are avaible at the Census tract level.
+
+```{r}
+variables_2021_tract <- tidycensus::load_variables(year = 2021, dataset = "acs5", cache = TRUE) %>% 
+  dplyr::filter(geography == "tract")
+variables_2021_tract %>% head()
+
+```
+
+The `str_detect()` function from the stringr package allows us to search text strings for key words. We can use it to find the variable names related to median household income and educational attainment.
+
+- *Median household income*: We can see that the variables B06011_001 and B07011_001 are estimates for the median household income for the total population
+
+```{r}
+variables_2021_tract %>% 
+  dplyr::filter(concept %>% stringr::str_detect('MEDIAN INCOME'))
+
+variables_2021 %>% dplyr::filter(name == 'B07011_001')
+```
+
+
+Todo: add in educational attainment
+
+```{r}
+variables_2021_tract %>% 
+  dplyr::filter(concept %>% stringr::str_detect('EDUCATION')) %>% view()
+
+# variables_2021_tract %>% filter(name %>% str_detect('B16010'))
+# B07011_001 and educational attainment (B16010_001, B16010_002, B16010_015, B16010_028, B16010_041)
+```
+
+
+We can also use the RStudio IDE to search the variables.
+
+```{r}
+# TO DO: add image of search bar
+variables_2021 %>% view()
+```
+
+
+### C.1.2. Import using get_acs(): A snapshot of 2021
+To download ACS data, we need three pieces of information. 
+
+- First, what do we want our geography to be? What's our unit of analysis? 
+For this we have decided to use the Census tracts of New York State. See a full list of available geographies here: https://walker-data.com/tidycensus/articles/basic-usage.html#geography-in-tidycensus
+
+- Second, what variables do we want? We can pull those directly in using the same command line. We can even give it our own titles. 
+
+- Third, what year of data do we want? There's room for that too! 
+
+
+```{r census}
+#let's use median income in the past 12 months B06011_001 and educational attainment (B16010_001, B16010_002, B16010_015, B16010_028, B16010_041)
+  # NOTE to CM: replaced B07011_001 b/c B06011_001 shows up earlier. Any reason why you chose B07011_001? I saw that both values seem to be the same.
+
+acs_data <- get_acs(geography = "tract",
+                    variables = c(hhincome = "B06011_001", 
+                                  total_education = "B16010_001", 
+                                  education_lessthanhs = "B16010_002", 
+                                  education_hs = "B16010_015", 
+                                  education_somecollege = "B16010_028", 
+                                  education_bachelors = "B16010_041"),
+                    state = "NY",
+                    year = 2021,
+                    output = "wide")
+
+# Convert educational attainment counts to percentages
+acs_data <- acs_data %>%
+  mutate(
+    perc_lessthanhs = (education_lessthanhsE / total_educationE),
+    perc_hs = (education_hsE / total_educationE),
+    perc_somecollege = (education_somecollegeE / total_educationE),
+    perc_bachelors = (education_bachelorsE / total_educationE)
+  )
+
+#this command brings in the data as a dataframe, which means there is no geometry attached
+class(acs_data)
+
+#Explore data
+summary(acs_data[, c("perc_lessthanhs", "perc_hs", "perc_somecollege", "perc_bachelors")])
+
+#Histogram for distribution of pooulation with less than high school education across census tracts
+histogram <- ggplot(acs_data, aes(x = perc_lessthanhs)) +
+  geom_histogram(binwidth = 0.03, fill = "lightblue", color = "black", alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Distribution of Population with Less Than High School Education",
+       x = "Percentage",
+       y = "Frequency")
+
+histogram
+
+# Boxplot for percentage of population with a  high school degree across census tracts
+boxplot <- ggplot(acs_data, aes(y = perc_lessthanhs)) +
+  geom_boxplot(fill = "blue", color = "black", alpha = 0.5) +
+  theme_minimal() +
+  labs(title = "Boxplot of Population with Less Than High School Education",
+       y = "Percentage")
+
+
+#Bar plots for percentages
+
+# Reshape the data for easier plotting
+# Reshape the data for easier plotting
+education_data <- acs_data %>%
+  select(GEOID, perc_lessthanhs, perc_hs, perc_somecollege, perc_bachelors) %>%
+  pivot_longer(cols = starts_with("perc_"), names_to = "education_level", values_to = "proportion")
+
+print(head(education_data))
+summary(education_data$proportion)
+
+
+# Bar plot for educational attainment percentages
+#HELP: WHY ARE MY PROPORTION VALUES SO WEIRD
+barplot <- ggplot(education_data, aes(x = education_level, y = proportion, fill = education_level)) +
+  geom_col(color = "black", alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Educational Attainment Proportions",
+       x = "Education Level",
+       y = "Proportion") +
+  theme(legend.position = "none")
+
+
+#to also bring in geometries, modify the command to bring in geometries
+acs_data_geo <- get_acs(
+    geography = "tract",
+    variables = c(hhincome = "B19013_001",
+                  total_education = "B16010_001", 
+                  education_lessthanhs= "B16010_002", 
+                  education_hs = "B16010_015", 
+                  education_somecollege = "B16010_028", 
+                  education_bachelors = "B16010_041"),
+    state = "NY",
+    year = 2021,
+    output = "wide", 
+    geometry = TRUE) %>%
+  dplyr::transmute(
+    GEOID = GEOID,
+    hhincome = hhincomeE,
+    perc_lessthanhs = (education_lessthanhsE / total_educationE),
+    perc_hs = (education_hsE / total_educationE),
+    perc_somecollege = (education_somecollegeE / total_educationE),
+    perc_bachelors = (education_bachelorsE / total_educationE)
+  )
+
+#using base R to plot
+
+#Plot median household income
+
+#first NY state
+plot(st_geometry(acs_data_geo), col = NA, border = 'grey')
+
+#then median household income
+plot(acs_data_geo['hhincomeE'], add = TRUE, main = "Median Household Income by Census Tract in NY (2021)",
+     col = hcl.colors(5, rev = TRUE))
+
+#FIX THESE LABELS AND LEGEND - base R sucks but it's something
+# Add a legend
+legend("bottomleft", legend = levels(cut(acs_data_geo$hhincomeE, breaks = 5)), title = "Income", cex = 0.8)
+
+#this isn't the best way to plot (we'll show better ways) but just to show that we have a map!
+```
+
+## C.2. Range of Data: Median Household Income from 2009 to 2021
+Note from Stephen: I had an error when I ran this code. Seemed to happen around downloading 2010-2015 5-year ACS:
+
+Error : z error - expecting three columns;
+Error: Your geometry data download failed. Please try again later or check the status of the Census Bureau website at https://www2.census.gov/geo/tiger/
+
+```{r range}
+
+# Define the years of interest
+years <- 2009:2021 
+
+#define the variables from above
+
+variables <- c(hhincome = "B19013_001")
+
+#download data for multiple years
+
+# Function to download ACS data for a given year
+get_acs_data <- function(year) {
+  get_acs(
+    geography = "tract",
+    variables = variables,
+    state = "NY",
+    year = year,
+    output = "wide",
+    geometry = TRUE
+  ) %>%
+    mutate(year = year)  # Add a column for the year
+}
+
+# Download data for all years and combine into one data frame
+acs_data_list <- lapply(years, get_acs_data)
+acs_data_all_years <- bind_rows(acs_data_list)
+
+View(acs_data_all_years)
+
+# Check the structure of the combined data
+str(acs_data_all_years)
+
+#plotting median household income over the years
+
+#there are XX (INSERT NUMBER) census tracts so let's aggregate and plot averages
+
+average_income <- acs_data_all_years %>%
+  group_by(year) %>%
+  summarise(avg_hhincome=mean(hhincomeE, na.rm=TRUE))
+
+income_overtime <- ggplot(average_income, aes(x=year, y=avg_hhincome))+
+  geom_line(color="blue") +
+  geom_point(color="blue")+
+  theme_minimal()+
+  labs(title="Average Median Household Income Over Time in NY (2009-2021)", 
+       x="Year", 
+       y= "Average Median Household Income")
+
+income_overtime
+
+
+```
+
+You can also map these! But we'll do this later. 
+ 
+
+## C.3. CDC PLACES Data (health outcomes)
+
+The [PLACES data](https://www.cdc.gov/places/index.html) was prepared by the Centers for Disease Control and Prevention (CDC), Robert Wood Johnson Foundation, and the CDC Foundation.
+
+```{r places}
+places_prelim <- sf::st_read('data/places2023/places2023.shp') # For some reason it's just a few states- need to double check this
+places_prelim_df <- readr::read_csv('data/places2023.csv')
+```
+
+# D. Cleaning Data
+## C.1. Census
+```{r}
+
+```
+
+## C.2. PLACES
+```{r}
+places_prelim_df %>% head() %>% View()
+
+places_cvd <- places_prelim_df %>% 
+  dplyr::filter(MeasureId == 'CHD' & StateAbbr == 'NY') %>% # measureid
+  dplyr::transmute(GEOID = LocationName,
+                   state = StateAbbr, # stateabbr
+                   chd_prev = Data_Value/100) # data_value
+```
+
+## C.3. Merge Data
+```{r}
+merged <- acs_data_geo %>% 
+  dplyr::left_join(places_cvd, by = 'GEOID')
+```
+
+
+# D. Exploring the Data
+
+```{r}
+
+```
+
+## D.1. Summarize with a table
+```{r}
+merged %>% 
+  skimr::skim(hhincome, perc_lessthanhs, perc_hs, perc_somecollege, perc_bachelors) 
+
+```
+
+## D.2. Summarize with box and violin plots
+```{r}
+# Income
+merged %>% 
+  ggplot(aes(y = hhincome, x = "")) + 
+  geom_violin() +
+  geom_boxplot(width = 0.2) + 
+  labs(x = "", y = "Median Household Income")
+
+# Educational attainment
+merged_long_edu <- merged %>% 
+  tidyr::pivot_longer(cols = -c(GEOID, state, geometry, hhincome),
+                      names_to = 'variable_name',
+                      values_to = 'value') 
+
+merged_long_edu %>% 
+  ggplot(aes(y = value, x = "")) + 
+  geom_violin() +
+  geom_boxplot(width = 0.2) +
+  facet_grid(. ~ variable_name) + 
+  labs(x = "", y = "Proportion")
+
+```
+
+
+# E. Mapping the Data
+
+Use the `ggplot::geom_sf()` in order to plot the Census tract boundaries for New York. 
+```{r}
+merged %>% 
+  ggplot() +
+  ggplot2::geom_sf()
+
+```
+
+## E.1. Creating a Choropleth Map for a Single Variable
+
+### ... Adding in Fill Colors
+
+
+```{r}
+smap_1 <- merged %>% 
+  ggplot() +
+  ggplot2::geom_sf(aes(fill = perc_hs))
+smap_1 
+
+```
+
+
+### ... Adding in a variable to create choropleth map
+In `ggplot::geom_sf()`, use the `fill` argument in the `aes()` function to specify a variable that you would like to visualize In our example, we are visualizing the geographic distribution of those who have a percentage high school education.
+```{r}
+smap_1 <- merged %>% 
+  ggplot() +
+  geom_sf(aes(fill = hhincome))
+smap_1
+```
+
+### ... Change legend colors
+Use the `low` and `high` arguments in the `scale_fill_continuous()` to specify colors to use for low and high values on a continuous scale. 
+```{r}
+smap_2 <- smap_1 + 
+  scale_fill_continuous(low = 'white', high = 'blue')
+smap_2
+```
+
+### ... Changing map theme
+Use the `theme_void()` function to remove the background and axis marks.
+```{r}
+smap_3 <- smap_2 +
+  theme_void()
+smap_3
+```
+
+### ... add a title
+Use the `title` argument in the `labs()` function in order to create a title for the map.
+```{r}
+smap_4 <- smap_3 +
+  labs(title = 'High School Educational Attainment in New York')
+smap_4
+```
+
+
+### ... adding in a north arrow and scale bar
+Use the `annotation_north_arrow()` and `annotation_scale()` functions from the ggspatial package to add in a north arrow and scalebar to the map.
+
+- The `location = tl` argument in `annotation_north_arrow()` function is used to place the north arrow on the top left area of the map.
+- The `unit_category = 'imperial'` argument in `annotation_scale()` function is used to change the units in the scale bar from metric to imperial units (showing miles instead of kilometers).
+```{r}
+smap_5 <- smap_4 +
+  ggspatial::annotation_north_arrow(location = 'tl') + # tl for top-left
+  ggspatial::annotation_scale(unit_category = 'imperial') # imperial units to show miles instead of km
+smap_5
+```
+
+
+### Putting it all together
+We can create the map using the previous functions in one step.
+```{r}
+smap <- merged %>% 
+  ggplot() +
+  ggplot2::geom_sf() +
+  geom_sf(aes(fill = perc_hs)) + 
+  scale_fill_continuous(low = 'white', high = 'blue') + 
+  theme_void() +
+  labs(title = 'High School Educational Attainment in New York') +
+  ggspatial::annotation_north_arrow(location = 'tl') +
+  ggspatial::annotation_scale(unit_category = 'imperial')
+smap
+
+```
+
+
+## E.2. Creating Choropleth Maps for Multiple Variables
+
+### Prepare long dataset with CHD and educational variables
+Long datasets are easier to use with ggplot2. We use the `tidyr::pivot_longer()` function in order to create one column for the values of the CHD and educational attainment variables in our dataset.
+```{r}
+merged_long <- merged %>% 
+  tidyr::pivot_longer(cols = c(chd_prev, perc_lessthanhs, perc_hs, perc_somecollege, perc_bachelors),
+                      names_to = 'variable_name',
+                      values_to = 'value') 
+```
+
+### Create a Facet Plot
+Use the `facet_wrap()` function to create a facet plot (allows us to create multiple maps in a grid) for our 5 variables. We use the `ncol = 3` argument to specify that we would like to create a grid of maps with 3 columns.
+```{r}
+multmap_1 <- merged_long %>% 
+  ggplot() +
+  ggplot2::geom_sf() +
+  geom_sf(aes(fill = value)) +
+  facet_wrap(vars(variable_name), ncol = 3)
+multmap_1
+```
+
+### ... Adding in different legend colors, theme, title, north arrow, and scalebar
+Use the same functions as we used with the single variable choropleth map in order to add different legend colors, theme, a title, a north arrow, and a scalebar.
+```{r}
+multmap_2 <- multmap_1 +
+  scale_fill_continuous(low = 'white', high = 'blue') +
+  theme_void() +
+  labs(title = 'High School Educational Attainment in New York') +
+  ggspatial::annotation_north_arrow(location = 'tl') +
+  ggspatial::annotation_scale(unit_category = 'imperial')
+multmap_2
+```
+
+### Putting it all together
+We can create the map using the previous functions in one step.
+```{r}
+multmap <- merged_long %>% 
+  ggplot() +
+  ggplot2::geom_sf() +
+  geom_sf(aes(fill = value)) +
+  facet_wrap(vars(variable_name), ncol = 3) + 
+  scale_fill_continuous(low = 'white', high = 'blue') + 
+  theme_void() +
+  labs(title = 'High School Educational Attainment in New York') +
+  ggspatial::annotation_north_arrow(location = 'tl') +
+  ggspatial::annotation_scale(unit_category = 'imperial')
+  
+```
+
+## E.3. Combining Multiple Maps
+
+Using the patchwork package, we can use the `/` operator to stack our previously created maps, one on top of the other. 
+```{r}
+smap / multmap
+```
+
+## F. Additional Resources
+Add links here
