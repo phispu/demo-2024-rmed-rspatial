@@ -19,7 +19,6 @@ library(ggspatial) # north arrow and scale bar
 library(patchwork) # combine multiple maps
 # library(ipumsr)
 
-
 # census_api_key("INSERT API KEY", install = TRUE)
 #this is christina's but delete later
 census_api_key("0d1515194f46f009f34f94afcbf045315abdbfbd", install = TRUE)
@@ -98,6 +97,7 @@ variables_2021 %>% view()
 
 
 ### C.1.2. Import using get_acs(): A snapshot of 2021
+
 To download ACS data, we need three pieces of information. 
 
 - First, what do we want our geography to be? What's our unit of analysis? 
@@ -208,6 +208,7 @@ acs_data_geo <- get_acs(
     perc_somecollege = (education_somecollegeE / total_educationE),
     perc_bachelors = (education_bachelorsE / total_educationE)
   )
+
 
 #using base R to plot
 
