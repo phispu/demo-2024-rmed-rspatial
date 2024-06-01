@@ -54,7 +54,7 @@ iris %>%
 ## C.1. Recent Census data
 
 ### C.1.1. Explore Available Data
-You can get a list of variable names and descriptions from the U.S. Census using the `load_variables()` function from the tidycensus package. Since we are interested in the year 2021, let's use the American Community Survey (vs. the Decennial Census data). We will use the 5-year ACS estimates because they tend to be more stable than 1-year estimates and filter to variables that are avaible at the Census tract level.
+You can get a list of variable names and descriptions from the U.S. Census using the `load_variables()` function from the tidycensus package. Since we are interested in the year 2021, let's use the American Community Survey (vs. the Decennial Census data). We will use the 5-year ACS estimates because they tend to be more stable than 1-year estimates and filter to variables that are available at the Census tract level.
 
 ```{r}
 variables_2021_tract <- tidycensus::load_variables(year = 2021, dataset = "acs5", cache = TRUE) %>% 
@@ -80,6 +80,8 @@ Todo: add in educational attainment
 ```{r}
 variables_2021_tract %>% 
   dplyr::filter(concept %>% stringr::str_detect('EDUCATION')) %>% view()
+
+variables_2021_tract %>% filter(name %>% str_detect('B16010'))
 
 # variables_2021_tract %>% filter(name %>% str_detect('B16010'))
 # B07011_001 and educational attainment (B16010_001, B16010_002, B16010_015, B16010_028, B16010_041)
@@ -175,7 +177,15 @@ barplot <- ggplot(education_data, aes(x = education_level, y = proportion, fill 
        x = "Education Level",
        y = "Proportion") +
   theme(legend.position = "none")
+barplot
 
+ggplot(education_data, aes(x = education_level, y = proportion, fill = education_level)) +
+  geom_bar(stat = 'identity', color = "black", alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Educational Attainment Proportions",
+       x = "Education Level",
+       y = "Proportion") +
+  theme(legend.position = "none")
 
 #to also bring in geometries, modify the command to bring in geometries
 acs_data_geo <- get_acs(
