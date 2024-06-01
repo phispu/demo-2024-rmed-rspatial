@@ -83,6 +83,8 @@ variables_2021_tract %>%
 
 variables_2021_tract %>% filter(name %>% str_detect('B16010'))
 
+# adding something
+
 # variables_2021_tract %>% filter(name %>% str_detect('B16010'))
 # B07011_001 and educational attainment (B16010_001, B16010_002, B16010_015, B16010_028, B16010_041)
 ```
