@@ -65,40 +65,36 @@ variables_2021_tract %>% head()
 
 The `str_detect()` function from the stringr package allows us to search text strings for key words. We can use it to find the variable names related to median household income and educational attainment.
 
-- *Median household income*: We can see that the variables B06011_001 and B07011_001 are estimates for the median household income for the total population
+- *Median household income*: We can see that the variables B06011_001 is an estimate for the median household income for the total population
 
 ```{r}
 variables_2021_tract %>% 
   dplyr::filter(concept %>% stringr::str_detect('MEDIAN INCOME'))
-
-variables_2021 %>% dplyr::filter(name == 'B07011_001')
 ```
 
 
-Todo: add in educational attainment
+- *#Educational attainment*: We can see that the variables B06009_001, B06009_002, B06009_003, B06009_004, B06009_005 are estimates related to educational attainment (B06009_002 for less than high school, B06009_003 for high school graduate, B06009_003 for some college, B06009_004 for bachelor's, and B06009_005 for graduate) for the total population
 
 ```{r}
 variables_2021_tract %>% 
-  dplyr::filter(concept %>% stringr::str_detect('EDUCATION')) %>% view()
+  dplyr::filter(concept %>% stringr::str_detect('EDUCATION'))
 
-variables_2021_tract %>% filter(name %>% str_detect('B16010'))
-
-# adding something, take 2
-
-# variables_2021_tract %>% filter(name %>% str_detect('B16010'))
-# B07011_001 and educational attainment (B16010_001, B16010_002, B16010_015, B16010_028, B16010_041)
 ```
 
 
 We can also use the RStudio IDE to search the variables.
 
 ```{r}
-# TO DO: add image of search bar
 variables_2021 %>% view()
 ```
 
 
 ### C.1.2. Import using get_acs(): A snapshot of 2021
+
+*NOTE to CM*: Replaced these variables b/c the new ones show up earlier when you search them. Any reason why you chose them?
+- Median HH income: B07011_001 --> B06011_001. Spot check: I saw that both values seem to be the same.
+- Education: B16010_001, B16010_002, B16010_015, B16010_028, B16010_041 -> B06009_001, B06009_002, B06009_003, B06009_004, B06009_005
+
 
 To download ACS data, we need three pieces of information. 
 
@@ -109,18 +105,16 @@ For this we have decided to use the Census tracts of New York State. See a full 
 
 - Third, what year of data do we want? There's room for that too! 
 
+Let's use median income in the past 12 months (B06011_001) and educational attainment (B16010_001, B16010_002, B16010_015, B16010_028, B16010_041)
 
 ```{r census}
-#let's use median income in the past 12 months B06011_001 and educational attainment (B16010_001, B16010_002, B16010_015, B16010_028, B16010_041)
-  # NOTE to CM: replaced B07011_001 b/c B06011_001 shows up earlier. Any reason why you chose B07011_001? I saw that both values seem to be the same.
-
 acs_data <- get_acs(geography = "tract",
                     variables = c(hhincome = "B06011_001", 
-                                  total_education = "B16010_001", 
-                                  education_lessthanhs = "B16010_002", 
-                                  education_hs = "B16010_015", 
-                                  education_somecollege = "B16010_028", 
-                                  education_bachelors = "B16010_041"),
+                                  total_education = "B06009_001", 
+                                  education_lessthanhs = "B06009_002", 
+                                  education_hs = "B06009_003", 
+                                  education_somecollege = "B06009_004", 
+                                  education_bachelors = "B06009_005"),
                     state = "NY",
                     year = 2021,
                     output = "wide")
@@ -180,9 +174,9 @@ barplot <- ggplot(education_data, aes(x = education_level, y = proportion, fill 
        y = "Proportion") +
   theme(legend.position = "none")
 barplot
-
-ggplot(education_data, aes(x = education_level, y = proportion, fill = education_level)) +
-  geom_bar(stat = 'identity', color = "black", alpha = 0.7) +
+# still needs work
+ggplot(education_data, aes(x = education_level, y = proportion)) +
+  geom_bar(stat = 'identity', color = "black", alpha = 0.7)
   theme_minimal() +
   labs(title = "Educational Attainment Proportions",
        x = "Education Level",
