@@ -7,7 +7,8 @@ output: html_document
 ---
 
 
-# A. Load Packages
+# A. Setup and Primer
+## A.1. Load Packages
 
 First, we will load packages that we need for this tutorial. In order to use the tidycensus package, you will need to sign up for a Census API key: https://api.census.gov/data/key_signup.html
 ```{r packages}
@@ -21,11 +22,11 @@ library(patchwork) # combine multiple maps
 
 # census_api_key("INSERT API KEY", install = TRUE)
 #this is christina's but delete later
-census_api_key("0d1515194f46f009f34f94afcbf045315abdbfbd", install = TRUE)
+# census_api_key("0d1515194f46f009f34f94afcbf045315abdbfbd", install = TRUE)
 
 ```
 
-# B. Primer to Tutorial Syntax
+## A.2. Primer to Tutorial Syntax
 
 When referring to a new function for the first time, we will use the double colon operator (`::`) to specify the source package of the function. For example, `dplyr::filter()` refers to the `filter()` function from the dplyr package, which is used to subset rows in a data frame that meets certain conditions (i.e., where Species is setosa).
 ```{r}
@@ -47,13 +48,7 @@ iris %>%
 ```
 
 
-
-
-
-# C. Importing Data
-## C.1. Recent Census data
-
-### C.1.1. Explore Available Data
+# B. Explore Available Census Data
 You can get a list of variable names and descriptions from the U.S. Census using the `load_variables()` function from the tidycensus package. Since we are interested in the year 2021, let's use the American Community Survey (vs. the Decennial Census data). We will use the 5-year ACS estimates because they tend to be more stable than 1-year estimates and filter to variables that are available at the Census tract level.
 
 ```{r}
@@ -78,25 +73,26 @@ variables_2021_tract %>%
 ```{r}
 variables_2021_tract %>% 
   dplyr::filter(concept %>% stringr::str_detect('EDUCATION'))
-
 ```
 
 
 We can also use the RStudio IDE to search the variables.
 
 ```{r}
-variables_2021 %>% view()
+variables_2021_tract %>% view()
 ```
 
 
-### C.1.2. Import using get_acs(): A snapshot of 2021
+# C. Importing Data
+## C.1. Recent Census data
+### C.1.1. A snapshot of 2021
 
 *NOTE to CM*: Replaced these variables b/c the new ones show up earlier when you search them. Any reason why you chose them?
 - Median HH income: B07011_001 --> B06011_001. Spot check: I saw that both values seem to be the same.
 - Education: B16010_001, B16010_002, B16010_015, B16010_028, B16010_041 -> B06009_001, B06009_002, B06009_003, B06009_004, B06009_005
 
 
-To download ACS data, we need three pieces of information. 
+To download ACS data using the `get_acs()` function, we need three pieces of information. 
 
 - First, what do we want our geography to be? What's our unit of analysis? 
 For this we have decided to use the Census tracts of New York State. See a full list of available geographies here: https://walker-data.com/tidycensus/articles/basic-usage.html#geography-in-tidycensus
@@ -105,7 +101,7 @@ For this we have decided to use the Census tracts of New York State. See a full 
 
 - Third, what year of data do we want? There's room for that too! 
 
-Let's use median income in the past 12 months (B06011_001) and educational attainment (B16010_001, B16010_002, B16010_015, B16010_028, B16010_041)
+Let's use median income in the past 12 months (B06011_001) and educational attainment (B16010_001, B16010_002, B16010_015, B16010_028, B16010_041). 
 
 ```{r census}
 acs_data <- get_acs(geography = "tract",
@@ -135,22 +131,22 @@ class(acs_data)
 summary(acs_data[, c("perc_lessthanhs", "perc_hs", "perc_somecollege", "perc_bachelors")])
 
 #Histogram for distribution of pooulation with less than high school education across census tracts
-histogram <- ggplot(acs_data, aes(x = perc_lessthanhs)) +
+plot_hist <- ggplot(acs_data, aes(x = perc_lessthanhs)) +
   geom_histogram(binwidth = 0.03, fill = "lightblue", color = "black", alpha = 0.7) +
   theme_minimal() +
   labs(title = "Distribution of Population with Less Than High School Education",
        x = "Percentage",
        y = "Frequency")
 
-histogram
+plot_hist
 
 # Boxplot for percentage of population with a  high school degree across census tracts
-boxplot <- ggplot(acs_data, aes(y = perc_lessthanhs)) +
+plot_box <- ggplot(acs_data, aes(y = perc_lessthanhs)) +
   geom_boxplot(fill = "blue", color = "black", alpha = 0.5) +
   theme_minimal() +
   labs(title = "Boxplot of Population with Less Than High School Education",
        y = "Percentage")
-
+plot_box
 
 #Bar plots for percentages
 
@@ -165,23 +161,18 @@ summary(education_data$proportion)
 
 
 # Bar plot for educational attainment percentages
-#HELP: WHY ARE MY PROPORTION VALUES SO WEIRD
-barplot <- ggplot(education_data, aes(x = education_level, y = proportion, fill = education_level)) +
-  geom_col(color = "black", alpha = 0.7) +
+plot_bar <- education_data %>% 
+  dplyr::group_by(education_level) %>% 
+  dplyr::summarize(mean_proportion = mean(proportion, na.rm = TRUE)) %>% 
+  ggplot(aes(x = education_level, y = mean_proportion, fill = education_level)) +
+  geom_bar(stat = 'identity', color = "black", alpha = 0.7) +
   theme_minimal() +
   labs(title = "Educational Attainment Proportions",
        x = "Education Level",
        y = "Proportion") +
   theme(legend.position = "none")
-barplot
-# still needs work
-ggplot(education_data, aes(x = education_level, y = proportion)) +
-  geom_bar(stat = 'identity', color = "black", alpha = 0.7)
-  theme_minimal() +
-  labs(title = "Educational Attainment Proportions",
-       x = "Education Level",
-       y = "Proportion") +
-  theme(legend.position = "none")
+plot_bar
+
 
 #to also bring in geometries, modify the command to bring in geometries
 acs_data_geo <- get_acs(
@@ -214,23 +205,25 @@ acs_data_geo <- get_acs(
 plot(st_geometry(acs_data_geo), col = NA, border = 'grey')
 
 #then median household income
-plot(acs_data_geo['hhincomeE'], add = TRUE, main = "Median Household Income by Census Tract in NY (2021)",
-     col = hcl.colors(5, rev = TRUE))
+  # this isn't working
+# plot(acs_data_geo['hhincomeE'], add = TRUE, main = "Median Household Income by Census Tract in NY (2021)",
+#      col = hcl.colors(5, rev = TRUE))
 
 #FIX THESE LABELS AND LEGEND - base R sucks but it's something
 # Add a legend
-legend("bottomleft", legend = levels(cut(acs_data_geo$hhincomeE, breaks = 5)), title = "Income", cex = 0.8)
+# this isn't working
+# legend("bottomleft", legend = levels(cut(acs_data_geo$hhincomeE, breaks = 5)), title = "Income", cex = 0.8)
 
 #this isn't the best way to plot (we'll show better ways) but just to show that we have a map!
 ```
 
-## C.2. Range of Data: Median Household Income from 2009 to 2021
+### C.1.2. Range of Data: Median Household Income from 2009 to 2021
 Note from Stephen: I had an error when I ran this code. Seemed to happen around downloading 2010-2015 5-year ACS:
 
-Error : z error - expecting three columns;
-Error: Your geometry data download failed. Please try again later or check the status of the Census Bureau website at https://www2.census.gov/geo/tiger/
+<!-- Error : z error - expecting three columns; -->
+<!-- Error: Your geometry data download failed. Please try again later or check the status of the Census Bureau website at https://www2.census.gov/geo/tiger/ -->
 
-```{r range}
+```{r range, eval = F}
 
 # Define the years of interest
 years <- 2009:2021 
@@ -287,13 +280,12 @@ income_overtime
 You can also map these! But we'll do this later. 
  
 
-## C.3. CDC PLACES Data (health outcomes)
+## C.2. PLACES Data (health outcomes)
 
 The [PLACES data](https://www.cdc.gov/places/index.html) was prepared by the Centers for Disease Control and Prevention (CDC), Robert Wood Johnson Foundation, and the CDC Foundation.
 
 ```{r places}
-places_prelim <- sf::st_read('data/places2023/places2023.shp') # For some reason it's just a few states- need to double check this
-places_prelim_df <- readr::read_csv('data/places2023.csv')
+places_prelim_df <- readr::read_csv('../data/places2023.csv')
 ```
 
 # D. Cleaning Data
@@ -504,4 +496,8 @@ smap / multmap
 ```
 
 ## F. Additional Resources
-Add links here
+Below are some additional references and resources:
+
+- Geocomputation with R (free online book): https://r.geocompx.org/
+- tidycensus vignette: https://walker-data.com/tidycensus/articles/basic-usage.html
+- tidyverse style guide: https://style.tidyverse.org/
