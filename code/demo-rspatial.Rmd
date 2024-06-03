@@ -6,8 +6,6 @@ date: "2024-06-12"
 output: html_document
 ---
 
-a change in main
-
 # A. Setup and Primer
 ## A.1. Load Packages
 
@@ -362,18 +360,6 @@ merged %>%
 ```
 
 ## E.1. Creating a Choropleth Map for a Single Variable
-
-### ... Adding in Fill Colors
-
-
-```{r}
-smap_1 <- merged %>% 
-  ggplot() +
-  ggplot2::geom_sf(aes(fill = perc_hs))
-smap_1 
-
-```
-
 
 ### ... Adding in a variable to create choropleth map
 In `ggplot::geom_sf()`, use the `fill` argument in the `aes()` function to specify a variable that you would like to visualize In our example, we are visualizing the geographic distribution of those who have a percentage high school education.
