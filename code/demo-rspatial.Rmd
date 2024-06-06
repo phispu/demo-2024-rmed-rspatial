@@ -3,36 +3,60 @@ title: 'An Introduction to Tidy R Spatial Packages: Incorporating Historic Socio
   Data from the US Census and Visualizing Geographic Distributions'
 author: "Stephen Uong & Christina Mehranbod"
 date: "2024-06-12"
-output: html_document
+output: 
+  html_document:
+    self_contained: yes
+    df_print: paged
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    toc_depth: 3
 ---
 
 # A. Setup and Primer
-## A.1. Load Packages
+## A.1. Install Packages
 
-First, we will install and load packages that we need for this tutorial. In order to use the tidycensus package, you will need to sign up for a Census API key: https://api.census.gov/data/key_signup.html
+First, please install any of the following packages required for this tutorial that you have not yet installed.
+```{r, eval = F}
+install.packages("tidyverse")
+install.packages("tidycensus")
+install.packages("readr")
+install.packages("sf")
+install.packages("ggspatial")
+install.packages("patchwork")
+```
+
+## A.2. Load Packages
+
+Load the following packages that we will use in this tutorial. These packages give us functions to help with the following:
+
+- `tidyverse`: data wrangling
+- `tidycensus`: importing Census data
+- `readr`: importing CSV files
+- `sf`: working with and mapping spatial data
+- `ggspatial`: mapping north arrow and scale bar
+- `patchwork`: combining multiple maps
+
 ```{r packages}
-
-#install.packages("tidyverse")
-#install.packages("readr")
-#install.packages("sf")
-#install.packages("tidycensus")
-#install.packages("patchwork")
-
-library(tidyverse)
-library(readr)
-library(sf)
-library(tidycensus)
-library(ggspatial) # north arrow and scale bar
-library(patchwork) # combine multiple maps
-# library(ipumsr)
-
-# census_api_key("INSERT API KEY", install = TRUE)
-#this is christina's but delete later
-# census_api_key("0d1515194f46f009f34f94afcbf045315abdbfbd", install = TRUE)
+library(tidyverse) # data wrangling
+library(tidycensus) # importing Census data
+library(readr) # importing CSV files
+library(sf) # working with and mapping spatial data
+library(ggspatial) # mapping north arrow and scale bar
+library(patchwork) # combining multiple maps
 
 ```
 
-## A.2. Primer to Tutorial Syntax
+## A.3. Obtain and Load Census API Key
+
+In order to use the tidycensus package, we will need to load the Census API key with the `tidycensus::census_api_key()` function. You can will need to obtain and API key [here](https://api.census.gov/data/key_signup.html). 
+```{r, eval = F}
+tidycensus::census_api_key("[PASTE CENSUS API KEY HERE]", install = TRUE)
+```
+
+
+## A.4. Primer to Tutorial Syntax
 
 When referring to a new function for the first time, we will use the double colon operator (`::`) to specify the source package of the function. For example, `dplyr::filter()` refers to the `filter()` function from the dplyr package, which is used to subset rows in a data frame that meets certain conditions (i.e., where Species is setosa).
 ```{r}
@@ -54,6 +78,7 @@ iris %>%
 ```
 
 
+
 # B. Explore Available Census Data
 You can get a list of variable names and descriptions from the U.S. Census using the `load_variables()` function from the tidycensus package. Since we are interested in the year 2021, let's use the American Community Survey (vs. the Decennial Census data). We will use the 5-year ACS estimates and filter to variables that are available at the Census tract level.
 
@@ -61,7 +86,6 @@ You can get a list of variable names and descriptions from the U.S. Census using
 variables_2021_tract <- tidycensus::load_variables(year = 2021, dataset = "acs5", cache = TRUE) %>% 
   dplyr::filter(geography == "tract")
 variables_2021_tract %>% head()
-
 ```
 
 The `str_detect()` function from the stringr package allows us to search text strings for key words. We can use it to find the variable names related to median household income and educational attainment.
@@ -88,10 +112,13 @@ We can also use the RStudio IDE to search the variables.
 variables_2021_tract %>% view()
 ```
 
+The `view()` function opens up the variables_2021_tract data frame containing all of the variable descriptions in a new tab. In the example below, we search for variables related to "income" by using the search bar on the top right hand side of the window.
+
+![Searching for Income](/../images/StepB-tidycensus-searchvars.png)
+
 
 # C. Importing Data
-## C.1. Recent Census data
-### C.1.1. A snapshot of 2021
+## C.1. Census data
 
 To download ACS data using the `get_acs()` function, we need three pieces of information. 
 
@@ -104,32 +131,101 @@ For this we have decided to use the Census tracts of New York State. See a full 
 
 Let's use median income in the past 12 months (B06011_001) and educational attainment (B06009_001, B06009_002, B06009_003, B06009_004, B06009_005). 
 
-```{r census}
-acs_data <- get_acs(geography = "tract",
-                    variables = c(hhincome = "B06011_001", 
-                                  total_education = "B06009_001", 
-                                  education_lessthanhs = "B06009_002", 
-                                  education_hs = "B06009_003", 
-                                  education_somecollege = "B06009_004", 
-                                  education_bachelors = "B06009_005"),
-                    state = "NY",
-                    year = 2021,
-                    output = "wide")
+### C.1.1. Tabular Census Data
 
-# Convert educational attainment counts to proportions
-acs_data <- acs_data %>%
+```{r census}
+acs_data_prelim <- get_acs(
+  geography = "tract",
+  variables = c(hhincome = "B06011_001", 
+                total_education = "B06009_001", 
+                education_lessthanhs = "B06009_002", 
+                education_hs = "B06009_003", 
+                education_somecollege = "B06009_004", 
+                education_bachelors = "B06009_005"),
+  state = "NY",
+  year = 2021,
+  output = "wide")
+
+# Check: The above command brings in the data as a dataframe, which means there is no geometry attached
+class(acs_data_prelim)
+
+```
+
+### C.1.2. Spatial Census Data
+
+Now first we downloaded the ACS data using tidycensus, but it was just a dataframe. This means there was no spatial component attached. The good news about get_acs() is that we can also ask it to bring in geometries -- an essential tool to make a map!
+
+```{r geo}
+acs_data_geo_prelim <- get_acs(
+    geography = "tract",
+    variables = c(hhincome = "B06011_001",
+                  total_education = "B06009_001", 
+                  education_lessthanhs= "B06009_002", 
+                  education_hs = "B06009_003", 
+                  education_somecollege = "B06009_004", 
+                  education_bachelors = "B06009_005"),
+    state = "NY",
+    year = 2021,
+    output = "wide", 
+    geometry = TRUE) # To also bring in geometries, add in the geometry = TRUE function
+  
+
+```
+
+
+## C.2. PLACES Data (health outcomes)
+
+The [PLACES data](https://www.cdc.gov/places/index.html) was prepared by the Centers for Disease Control and Prevention (CDC), Robert Wood Johnson Foundation, and the CDC Foundation. We have prepared a subset of the data that contains only the CHD prevalence for the state of New York.
+
+```{r places}
+places_prelim <- readr::read_csv("../data/places2023_ny_chd.csv")
+```
+
+# D. Cleaning Data
+
+## D.1. Census
+First, convert educational attainment counts to proportions in the Census data.
+```{r}
+# Tabular
+acs_data <- acs_data_prelim %>%
   mutate(
     perc_lessthanhs = (education_lessthanhsE / total_educationE),
     perc_hs = (education_hsE / total_educationE),
     perc_somecollege = (education_somecollegeE / total_educationE),
-    perc_bachelors = (education_bachelorsE / total_educationE)
-  )
+    perc_bachelors = (education_bachelorsE / total_educationE))
 
-#the above command brings in the data as a dataframe, which means there is no geometry attached
-class(acs_data)
+# Spatial
+acs_data_geo <- acs_data_geo_prelim %>% 
+  dplyr::transmute(
+    GEOID = GEOID,
+    hhincome = hhincomeE,
+    perc_lessthanhs = (education_lessthanhsE / total_educationE),
+    perc_hs = (education_hsE / total_educationE),
+    perc_somecollege = (education_somecollegeE / total_educationE),
+    perc_bachelors = (education_bachelorsE / total_educationE))
 ```
 
-Let's begin by exploring the data. We can do that with summary() or a variety of data visualization techniques. 
+## D.2. PLACES
+```{r}
+places <- places_prelim %>% 
+  dplyr::transmute(GEOID = GEOID %>% as.character(),
+                   chd_prev)
+```
+
+## D.2. Merge Data
+
+Use the `dplyr::left_join()` function in order to conduct a table join for the geographic Census data with the PLACES data.
+```{r}
+merged <- acs_data_geo %>% 
+  dplyr::left_join(places, by = 'GEOID')
+```
+
+
+# E. Exploring the Data
+
+### E.1. A Snapshot of 2021
+
+Let's begin by exploring the data. We can do that with `summary()` function or a variety of data visualization techniques. 
 
 A histogram visually represents the distribution of a dataset by grouping data into bins and displaying the frequency of data points within each bin.
 ```{r histogram}
@@ -193,40 +289,7 @@ plot_bar
 
 ```
 
-Now first we downloaded the ACS data using tidycensus, but it was just a dataframe. This means there was no spatial component attached. The good news about get_acs() is that we can also ask it to bring in geometries -- an essential tool to make a map!
-
-```{r geo}
-#to also bring in geometries, modify the command to bring in geometries
-acs_data_geo <- get_acs(
-    geography = "tract",
-    variables = c(hhincome = "B19013_001",
-                  total_education = "B16010_001", 
-                  education_lessthanhs= "B16010_002", 
-                  education_hs = "B16010_015", 
-                  education_somecollege = "B16010_028", 
-                  education_bachelors = "B16010_041"),
-    state = "NY",
-    year = 2021,
-    output = "wide", 
-    geometry = TRUE) %>%
-  dplyr::transmute(
-    GEOID = GEOID,
-    hhincome = hhincomeE,
-    perc_lessthanhs = (education_lessthanhsE / total_educationE),
-    perc_hs = (education_hsE / total_educationE),
-    perc_somecollege = (education_somecollegeE / total_educationE),
-    perc_bachelors = (education_bachelorsE / total_educationE)
-  )
-
-
-#using base R to plot
-
-#NY state
-plot(st_geometry(acs_data_geo), col = NA, border = 'grey')
-
-```
-
-### C.1.2. Range of Data: Median Household Income from 2009 to 2021
+### E.2. Range of Data: Median Household Income from 2009 to 2021
 
 ```{r range, eval = F}
 
@@ -282,71 +345,7 @@ income_overtime
 
 ```
 
-You can also map these! But we'll do this later. 
- 
-
-## C.2. PLACES Data (health outcomes)
-
-The [PLACES data](https://www.cdc.gov/places/index.html) was prepared by the Centers for Disease Control and Prevention (CDC), Robert Wood Johnson Foundation, and the CDC Foundation.
-
-```{r places}
-places_prelim_df <- readr::read_csv("~/Library/CloudStorage/OneDrive-ColumbiaUniversityIrvingMedicalCenter/PhD Admin/Projects Collaborations/R Consortium with Stephen/places2023.csv")
-```
-
-# D. Cleaning Data
-
-## C.1. PLACES
-```{r}
-places_prelim_df %>% head() %>% View()
-
-places_cvd <- places_prelim_df %>% 
-  dplyr::filter(MeasureId == 'CHD' & StateAbbr == 'NY') %>% # measureid
-  dplyr::transmute(GEOID = LocationName,
-                   state = StateAbbr, # stateabbr
-                   chd_prev = Data_Value/100) # data_value
-```
-
-## C.2. Merge Data
-```{r}
-merged <- acs_data_geo %>% 
-  dplyr::left_join(places_cvd, by = 'GEOID')
-```
-
-
-# D. Exploring the Data
-
-## D.1. Summarize with a table
-```{r}
-merged %>% 
-  skimr::skim(hhincome, perc_lessthanhs, perc_hs, perc_somecollege, perc_bachelors) 
-
-```
-
-## D.2. Summarize with box and violin plots
-```{r}
-# Income
-merged %>% 
-  ggplot(aes(y = hhincome, x = "")) + 
-  geom_violin() +
-  geom_boxplot(width = 0.2) + 
-  labs(x = "", y = "Median Household Income")
-
-# Educational attainment
-merged_long_edu <- merged %>% 
-  tidyr::pivot_longer(cols = -c(GEOID, state, geometry, hhincome),
-                      names_to = 'variable_name',
-                      values_to = 'value') 
-
-merged_long_edu %>% 
-  ggplot(aes(y = value, x = "")) + 
-  geom_violin() +
-  geom_boxplot(width = 0.2) +
-  facet_grid(. ~ variable_name) + 
-  labs(x = "", y = "Proportion")
-
-```
-
-# E. Mapping the Data
+# F. Mapping the Data
 
 Use the `ggplot::geom_sf()` in order to plot the Census tract boundaries for New York. 
 ```{r}
@@ -356,7 +355,7 @@ merged %>%
 
 ```
 
-## E.1. Creating a Choropleth Map for a Single Variable
+## F.1. Creating a Choropleth Map for a Single Variable
 
 A choropleth map is a thematic map in which areas are shaded or patterned in proportion to the value of a variable being represented. This type of map is commonly used to visualize how a measurement varies across a geographic area, such as population density or median income.
 
@@ -426,11 +425,10 @@ smap <- merged %>%
   ggspatial::annotation_scale(unit_category = 'imperial')
 
 smap
-
 ```
 
 
-## E.2. Creating Choropleth Maps for Multiple Variables
+## F.2. Creating Choropleth Maps for Multiple Variables
 
 ### Prepare long dataset with CHD and educational variables
 Long datasets are easier to use with ggplot2. 
@@ -460,20 +458,20 @@ multmap_1
 ```
 
 ### ... Adding in different legend colors, theme, title, north arrow, and scalebar
-Use the same functions as we used with the single variable choropleth map in order to add different legend colors, theme, a title, a north arrow, and a scalebar.
+Use the same functions as we used with the single variable choropleth map in order to add different legend colors, theme, a title, a north arrow, and a scalebar. Use the `height` and `width` arguments in the `ggspatial::annotation_north_arrow()` function in order to change the size of the north arrow.
 ```{r}
 multmap_2 <- multmap_1 +
   scale_fill_continuous(low = 'white', high = 'blue') +
   theme_void() +
   labs(title = 'High School Educational Attainment in New York') +
-  ggspatial::annotation_north_arrow(location = 'tl') +
+  ggspatial::annotation_north_arrow(location = 'tl', height = unit(0.5, "cm"), width = unit(0.5, "cm")) +
   ggspatial::annotation_scale(unit_category = 'imperial')
 
 multmap_2
 ```
 
 ### Putting it all together
-We can create the map using the previous functions in one step.
+We can create the map using the previous functions in one step. 
 ```{r}
 multmap <- merged_long %>% 
   ggplot() +
@@ -483,21 +481,21 @@ multmap <- merged_long %>%
   scale_fill_continuous(low = 'white', high = 'blue') + 
   theme_void() +
   labs(title = 'High School Educational Attainment in New York') +
-  ggspatial::annotation_north_arrow(location = 'tl') +
+  ggspatial::annotation_north_arrow(location = 'tl', height = unit(0.5, "cm"), width = unit(0.5, "cm")) +
   ggspatial::annotation_scale(unit_category = 'imperial')
 
 multmap
   
 ```
 
-## E.3. Combining Multiple Maps
+## F.3. Combining Multiple Maps
 
 Using the patchwork package, we can use the `/` operator to stack our previously created maps, one on top of the other. 
 ```{r}
 smap / multmap
 ```
 
-## F. Additional Resources
+# G. Additional Resources
 Below are some additional references and resources:
 
 - Geocomputation with R (free online book): https://r.geocompx.org/
