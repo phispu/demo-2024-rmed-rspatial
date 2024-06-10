@@ -2855,13 +2855,6 @@ iris %&gt;%
   </script>
 </div>
 </div>
-<div id="a.5.-set-root-directory" class="section level2">
-<h2>A.5. Set Root Directory</h2>
-<p>This code is needed so that the relative paths used in the data
-importing later in this code can be the same when running the code
-individually and knitting this RMarkdown file.</p>
-<pre class="r"><code>knitr::opts_knit$set(root.dir = &quot;..&quot;)</code></pre>
-</div>
 </div>
 <div id="b.-explore-available-census-data" class="section level1">
 <h1>B. Explore Available Census Data</h1>
@@ -3002,7 +2995,7 @@ Robert Wood Johnson Foundation, and the CDC Foundation.</p>
 <p>You can use the <code>sf::st_read()</code> function in order to
 import spatial data files into R. You can see that the file imported is
 a “simple feature”, which is a spatial data format in R.</p>
-<pre class="r"><code>places_sf &lt;- sf::st_read(&#39;data/places2023-spatial/places2023.shp&#39;)</code></pre>
+<pre class="r"><code>places_sf &lt;- sf::st_read(&#39;../data/places2023-spatial/places2023.shp&#39;)</code></pre>
 <pre><code>## Reading layer `places2023&#39; from data source 
 ##   `C:\Users\steph\OneDrive - cumc.columbia.edu\Phi\My Teaching\Tutorials\demo-2024-rmed-rspatial\data\places2023-spatial\places2023.shp&#39; 
 ##   using driver `ESRI Shapefile&#39;
@@ -3016,7 +3009,7 @@ only the coronary heart disease (CHD) prevalence for the state of New
 York. We will use the <code>readr::read_csv()</code> function to join
 this tabular data with the spatial Census data that we imported
 earlier.</p>
-<pre class="r"><code>places_prelim &lt;- readr::read_csv(&quot;data/places2023_ny_chd.csv&quot;)</code></pre>
+<pre class="r"><code>places_prelim &lt;- readr::read_csv(&quot;../data/places2023_ny_chd.csv&quot;)</code></pre>
 <pre><code>## Rows: 4840 Columns: 3
 ## ── Column specification ────────────────────────────────────────────────────────
 ## Delimiter: &quot;,&quot;
