@@ -1,7 +1,7 @@
 ---
 title: 'An Introduction to Tidy R Spatial Packages: Incorporating Historic Sociodemographic
   Data from the US Census and Visualizing Geographic Distributions'
-author: "Stephen Uong & Christina Mehranbod"
+authors: "Stephen Uong & Christina Mehranbod"
 date: "2024-06-12"
 output: 
   html_document:
@@ -19,11 +19,13 @@ output:
 
 First, please install any of the following packages required for this tutorial that you have not yet installed.
 ```{r, eval = F}
-install.packages("tidyverse")
+# Spatial packages
 install.packages("tidycensus")
-install.packages("readr")
 install.packages("sf")
 install.packages("ggspatial")
+# Data importing, wrangling, and plotting packages
+install.packages("tidyverse")
+install.packages("readr")
 install.packages("patchwork")
 ```
 
@@ -31,21 +33,22 @@ install.packages("patchwork")
 
 Load the following packages that we will use in this tutorial. These packages give us functions to help with the following:
 
-- `tidyverse`: data wrangling
 - `tidycensus`: importing Census data
-- `readr`: importing CSV files
 - `sf`: working with and mapping spatial data
 - `ggspatial`: mapping north arrow and scale bar
+- `tidyverse`: data wrangling
+- `readr`: importing CSV files
 - `patchwork`: combining multiple maps
 
-```{r packages}
-library(tidyverse) # data wrangling
-library(tidycensus) # importing Census data
-library(readr) # importing CSV files
-library(sf) # working with and mapping spatial data
-library(ggspatial) # mapping north arrow and scale bar
-library(patchwork) # combining multiple maps
-
+```{r packages, results = F}
+# Spatial packages
+library(tidycensus) 
+library(sf) 
+library(ggspatial) 
+# Data importing, wrangling, and plotting packages
+library(tidyverse) 
+library(readr) 
+library(patchwork) 
 ```
 
 ## A.3. Obtain and Load Census API Key
@@ -65,7 +68,7 @@ data(iris) # This loads the iris dataset
 dplyr::filter(iris, Species == 'setosa')
 ```
 
-In this tutorial, we will use [pipes](https://r4ds.had.co.nz/pipes.html) (`%>%`) from the magrittr package in order to clearly express sequences of steps. Piping allows us to read the code from top --> bottom rather than inside --> out.
+In this tutorial, we will use data wrangling functions from the [tidyverse](https://www.tidyverse.org/) collection of packages and [pipes](https://r4ds.had.co.nz/pipes.html) (`%>%`) from the magrittr package in order to clearly express sequences of steps. Piping allows us to read the code from top --> bottom rather than inside --> out.
 ```{r}
 # Without pipes
 head(dplyr::select(dplyr::filter(iris, Species == 'setosa'), Sepal.Length, Sepal.Width))
@@ -83,7 +86,10 @@ iris %>%
 You can get a list of variable names and descriptions from the U.S. Census using the `load_variables()` function from the tidycensus package. Since we are interested in the year 2021, let's use the American Community Survey (vs. the Decennial Census data). We will use the 5-year ACS estimates and filter to variables that are available at the Census tract level.
 
 ```{r}
-variables_2021_tract <- tidycensus::load_variables(year = 2021, dataset = "acs5", cache = TRUE) %>% 
+variables_2021_tract <- tidycensus::load_variables(
+    year = 2021, 
+    dataset = "acs5", 
+    cache = TRUE) %>% 
   dplyr::filter(geography == "tract")
 variables_2021_tract %>% head()
 ```
@@ -114,7 +120,7 @@ variables_2021_tract %>% view()
 
 The `view()` function opens up the variables_2021_tract data frame containing all of the variable descriptions in a new tab. In the example below, we search for variables related to "income" by using the search bar on the top right hand side of the window.
 
-![Searching for Income](/../images/StepB-tidycensus-searchvars.png)
+![Searching for Income](../images/StepB-tidycensus-searchvars.png)
 
 
 # C. Importing Data
@@ -146,6 +152,8 @@ acs_data_prelim <- get_acs(
   year = 2021,
   output = "wide")
 
+acs_data_prelim %>% head()
+
 # Check: The above command brings in the data as a dataframe, which means there is no geometry attached
 class(acs_data_prelim)
 
@@ -155,7 +163,7 @@ class(acs_data_prelim)
 
 Now first we downloaded the ACS data using tidycensus, but it was just a dataframe. This means there was no spatial component attached. The good news about get_acs() is that we can also ask it to bring in geometries -- an essential tool to make a map!
 
-```{r geo}
+```{r geo, results = F}
 acs_data_geo_prelim <- get_acs(
     geography = "tract",
     variables = c(hhincome = "B06011_001",
@@ -169,13 +177,22 @@ acs_data_geo_prelim <- get_acs(
     output = "wide", 
     geometry = TRUE) # To also bring in geometries, add in the geometry = TRUE function
   
-
+acs_data_geo_prelim %>% view()
+plot(acs_data_geo_prelim)
 ```
 
 
 ## C.2. PLACES Data (health outcomes)
 
-The [PLACES data](https://www.cdc.gov/places/index.html) was prepared by the Centers for Disease Control and Prevention (CDC), Robert Wood Johnson Foundation, and the CDC Foundation. We have prepared a subset of the data that contains only the CHD prevalence for the state of New York.
+The [PLACES data](https://www.cdc.gov/places/index.html) was prepared by the Centers for Disease Control and Prevention (CDC), Robert Wood Johnson Foundation, and the CDC Foundation. 
+
+You can use the `sf::st_read()` function in order to import spatial data files into R. You can see that the file imported is a "simple feature", which is a spatial data format in R.
+
+```{r}
+places_sf <- sf::st_read('../data/places2023-spatial/places2023.shp')
+```
+
+We have prepared a subset of the data in a CSV file that contains only the coronary heart disease (CHD) prevalence for the state of New York. We will use the `readr::read_csv()` function to join this tabular data with the spatial Census data that we imported earlier.
 
 ```{r places}
 places_prelim <- readr::read_csv("../data/places2023_ny_chd.csv")
@@ -185,10 +202,12 @@ places_prelim <- readr::read_csv("../data/places2023_ny_chd.csv")
 
 ## D.1. Census
 First, convert educational attainment counts to proportions in the Census data.
-```{r}
+```{r, echo = F}
 # Tabular
 acs_data <- acs_data_prelim %>%
-  mutate(
+  dplyr::transmute(
+    GEOID = GEOID,
+    hhincome = hhincomeE,
     perc_lessthanhs = (education_lessthanhsE / total_educationE),
     perc_hs = (education_hsE / total_educationE),
     perc_somecollege = (education_somecollegeE / total_educationE),
@@ -206,11 +225,20 @@ acs_data_geo <- acs_data_geo_prelim %>%
 ```
 
 ## D.2. PLACES
+
+Next, we can looking at the column data types in the Census and PLACES data frames using the `str()` functions. We can see that the unique identifier for each Census tract, GEOID, is a character column in the Census data but a numeric column in the PLACES data.
+```{r}
+acs_data_geo %>% str()
+places_prelim %>% str()
+```
+
+We will join the Census and PLACES data together by GEOID, so we will need to convert GEOID in the PLACES data to a character column since GEOID will need to be the same data type for a successful table join.
 ```{r}
 places <- places_prelim %>% 
   dplyr::transmute(GEOID = GEOID %>% as.character(),
                    chd_prev)
 ```
+
 
 ## D.2. Merge Data
 
@@ -229,11 +257,12 @@ Let's begin by exploring the data. We can do that with `summary()` function or a
 
 A histogram visually represents the distribution of a dataset by grouping data into bins and displaying the frequency of data points within each bin.
 ```{r histogram}
+# Explore data
+acs_data %>% 
+  dplyr::select(perc_lessthanhs, perc_hs, perc_somecollege, perc_bachelors) %>% 
+  summary()
 
-#Explore data
-summary(acs_data[, c("perc_lessthanhs", "perc_hs", "perc_somecollege", "perc_bachelors")])
-
-#Histogram for distribution of pooulation with less than high school education across census tracts
+# Histogram for distribution of population with less than high school education across census tracts
 plot_hist <- ggplot(acs_data, aes(x = perc_lessthanhs)) +
   geom_histogram(binwidth = 0.03, fill = "lightblue", color = "black", alpha = 0.7) +
   theme_minimal() +
@@ -262,7 +291,7 @@ plot_box
 A bar plot represents categorical data with rectangular bars, where the height or length of each bar is proportional to the value it represents.
 
 ```{r barplot}
-#Bar plots for percentages
+# Bar plots for percentages
 
 # Reshape the data for easier plotting
 education_data <- acs_data %>%
@@ -291,18 +320,15 @@ plot_bar
 
 ### E.2. Range of Data: Median Household Income from 2009 to 2021
 
-```{r range, eval = F}
-
+```{r range}
 # Define the years of interest
-years <- 2009:2021 
+years <- 2017:2021
 
-#define the variables from above
-
+# Define the variables from above
 variables <- c(hhincome = "B19013_001")
 
-#download data for multiple years
-
-# Function to download ACS data for a given year
+# Download data for multiple years
+  # Function to download ACS data for a given year
 get_acs_data <- function(year) {
   get_acs(
     geography = "tract",
@@ -310,8 +336,7 @@ get_acs_data <- function(year) {
     state = "NY",
     year = year,
     output = "wide",
-    geometry = TRUE
-  ) %>%
+    geometry = FALSE) %>%
     mutate(year = year)  # Add a column for the year
 }
 
@@ -319,19 +344,16 @@ get_acs_data <- function(year) {
 acs_data_list <- lapply(years, get_acs_data)
 acs_data_all_years <- bind_rows(acs_data_list)
 
-View(acs_data_all_years)
+acs_data_all_years %>% head()
 
 # Check the structure of the combined data
-str(acs_data_all_years)
+acs_data_all_years %>% str()
 
-#plotting median household income over the years
-
-#there are over 4,000 census tracts so let's aggregate and plot averages
-
+# Plotting median household income over the years
+  # There are over 4,000 census tracts so let's aggregate and plot averages
 average_income <- acs_data_all_years %>%
   group_by(year) %>%
   summarise(avg_hhincome=mean(hhincomeE, na.rm=TRUE))
-
 income_overtime <- ggplot(average_income, aes(x=year, y=avg_hhincome))+
   geom_line(color="blue") +
   geom_point(color="blue")+
@@ -341,7 +363,6 @@ income_overtime <- ggplot(average_income, aes(x=year, y=avg_hhincome))+
        y= "Average Median Household Income")
 
 income_overtime
-
 
 ```
 
@@ -391,7 +412,7 @@ smap_3
 Use the `title` argument in the `labs()` function in order to create a title for the map.
 ```{r}
 smap_4 <- smap_3 +
-  labs(title = 'High School Educational Attainment in New York')
+  labs(title = 'Median Household Income in New York')
 
 smap_4
 ```
@@ -414,6 +435,16 @@ smap_5
 ### Putting it all together
 We can create the map using the previous functions in one step.
 ```{r}
+merged %>% 
+  ggplot() +
+  geom_sf(aes(fill = hhincome)) %>% 
+  scale_fill_continuous(low = 'white', high = 'blue') +
+  theme_void() + 
+  labs(title = 'Median Household income in New York') +
+  ggspatial::annotation_north_arrow(location = 'tl') +
+  ggspatial::annotation_scale(unit_category = 'imperial')
+
+
 smap <- merged %>% 
   ggplot() +
   ggplot2::geom_sf() +
@@ -454,7 +485,6 @@ multmap_1 <- merged_long %>%
   geom_sf(aes(fill = value)) +
   facet_wrap(vars(variable_name), ncol = 3)
 
-multmap_1
 ```
 
 ### ... Adding in different legend colors, theme, title, north arrow, and scalebar
@@ -463,8 +493,9 @@ Use the same functions as we used with the single variable choropleth map in ord
 multmap_2 <- multmap_1 +
   scale_fill_continuous(low = 'white', high = 'blue') +
   theme_void() +
-  labs(title = 'High School Educational Attainment in New York') +
-  ggspatial::annotation_north_arrow(location = 'tl', height = unit(0.5, "cm"), width = unit(0.5, "cm")) +
+  labs(title = 'CHD Prevalence and Educational Attainment in New York') +
+  ggspatial::annotation_north_arrow(location = 'tl', height = unit(0.5, "cm"), width = unit(0.5, "cm"),
+                                    style = north_arrow_orienteering(text_size = 1)) +
   ggspatial::annotation_scale(unit_category = 'imperial')
 
 multmap_2
@@ -480,8 +511,9 @@ multmap <- merged_long %>%
   facet_wrap(vars(variable_name), ncol = 3) + 
   scale_fill_continuous(low = 'white', high = 'blue') + 
   theme_void() +
-  labs(title = 'High School Educational Attainment in New York') +
-  ggspatial::annotation_north_arrow(location = 'tl', height = unit(0.5, "cm"), width = unit(0.5, "cm")) +
+  labs(title = 'CHD Prevalence and Educational Attainment in New York') +
+  ggspatial::annotation_north_arrow(location = 'tl', height = unit(0.5, "cm"), width = unit(0.5, "cm"),
+                                    style = north_arrow_orienteering(text_size = 1)) +
   ggspatial::annotation_scale(unit_category = 'imperial')
 
 multmap
@@ -490,14 +522,14 @@ multmap
 
 ## F.3. Combining Multiple Maps
 
-Using the patchwork package, we can use the `/` operator to stack our previously created maps, one on top of the other. 
+Using the patchwork package, we can use the `/` operator to stack our previously created maps, one on top of the other. The map below is only a quick example. When producing a map to share, you would want to change the north arrow, scalebar, and text sizes.
 ```{r}
 smap / multmap
 ```
 
 # G. Additional Resources
-Below are some additional references and resources:
+In case you would like to learn more about geocomputation, data wrangling, or the tidycensus package, here are some additional resources:
 
-- Geocomputation with R (free online book): https://r.geocompx.org/
-- tidycensus vignette: https://walker-data.com/tidycensus/articles/basic-usage.html
-- tidyverse style guide: https://style.tidyverse.org/
+- [Geocomputation with R (free online book)](https://r.geocompx.org/)
+- [R for Data Science (free online book)](https://r4ds.hadley.nz/)
+- [Vignette for the tidycensus package](https://walker-data.com/tidycensus/articles/basic-usage.html)
