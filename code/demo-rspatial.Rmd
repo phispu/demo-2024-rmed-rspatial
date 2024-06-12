@@ -442,15 +442,6 @@ smap_5
 ### Putting it all together
 We can create the map using the previous functions in one step.
 ```{r map_single}
-merged %>% 
-  ggplot() +
-  geom_sf(aes(fill = hhincome)) +
-  scale_fill_continuous(low = 'white', high = 'blue') +
-  theme_void() + 
-  labs(title = 'Median Household Income in New York') + 
-  ggspatial::annotation_north_arrow(location = 'tl') +
-  ggspatial::annotation_scale(unit_category = 'imperial')
-
 smap <- merged %>% 
   ggplot() +
   geom_sf(aes(fill = hhincome)) + 
