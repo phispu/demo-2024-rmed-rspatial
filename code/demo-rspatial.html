@@ -3313,7 +3313,6 @@ smap_5</code></pre>
 <p>We can create the map using the previous functions in one step.</p>
 <pre class="r"><code>smap &lt;- merged %&gt;% 
   ggplot() +
-  ggplot2::geom_sf() +
   geom_sf(aes(fill = hhincome)) + 
   scale_fill_continuous(low = &#39;white&#39;, high = &#39;blue&#39;) + 
   theme_void() +
