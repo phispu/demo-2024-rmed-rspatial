@@ -480,7 +480,7 @@ multmap_1 <- merged_long %>%
   ggplot2::geom_sf() +
   geom_sf(aes(fill = value)) +
   facet_wrap(vars(variable_name), ncol = 3)
-
+multmap_1
 ```
 
 ### ... Adding in different legend colors, theme, title, north arrow, and scalebar
